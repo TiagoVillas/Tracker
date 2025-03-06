@@ -8,12 +8,10 @@
   --background-end-rgb: 255, 255, 255;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 0, 0, 0;
 }
 
 body {
@@ -30,4 +28,55 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Estilos para o calendário */
+.react-calendar {
+  @apply w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm;
+}
+
+.react-calendar__navigation {
+  @apply flex justify-between p-2 mb-2;
+}
+
+.react-calendar__navigation button {
+  @apply p-1 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.react-calendar__month-view__weekdays {
+  @apply text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase;
+}
+
+.react-calendar__month-view__days__day {
+  @apply p-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  @apply text-red-500 dark:text-red-400;
+}
+
+.react-calendar__month-view__days__day--neighboringMonth {
+  @apply text-gray-400 dark:text-gray-600;
+}
+
+.react-calendar__tile--active {
+  @apply bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300;
+}
+
+.react-calendar__tile--hasActive {
+  @apply bg-indigo-50 dark:bg-indigo-900/50;
+}
+
+.react-calendar__tile--now {
+  @apply bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300;
+}
+
+/* Estilo para dias com hábitos concluídos */
+.habit-completed {
+  @apply bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 relative;
+}
+
+.habit-completed::after {
+  content: "";
+  @apply absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-green-500 dark:bg-green-400 rounded-full;
 }

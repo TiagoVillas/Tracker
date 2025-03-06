@@ -27,6 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user);
       setLoading(false);
+      
+      // Armazenar o ID do usuário no localStorage para uso nas funções de permissão
+      if (user) {
+        localStorage.setItem('userId', user.uid);
+      } else {
+        localStorage.removeItem('userId');
+      }
     });
 
     return () => unsubscribe();
@@ -35,7 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      // Armazenar o ID do usuário no localStorage imediatamente após o login
+      if (result.user) {
+        localStorage.setItem('userId', result.user.uid);
+      }
     } catch (error) {
       console.error("Error signing in with Google", error);
     }
@@ -44,6 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOutUser = async () => {
     try {
       await firebaseSignOut(auth);
+      // Remover o ID do usuário do localStorage ao fazer logout
+      localStorage.removeItem('userId');
     } catch (error) {
       console.error("Error signing out", error);
     }

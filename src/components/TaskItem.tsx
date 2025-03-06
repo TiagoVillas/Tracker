@@ -22,6 +22,8 @@ interface Task {
   priority: "low" | "medium" | "high";
   createdAt: Date;
   projectId: string | null;
+  userId: string;
+  forToday?: boolean;
 }
 
 interface TaskItemProps {

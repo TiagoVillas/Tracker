@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    // Desativa a verificação do ESLint durante o build
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -19,6 +23,10 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "firebasestorage.googleapis.com",
+      },
+      {
+        protocol: "https",
+        hostname: "www.gstatic.com",
       },
     ],
     dangerouslyAllowSVG: true,

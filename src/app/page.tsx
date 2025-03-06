@@ -552,7 +552,7 @@ export default function Dashboard() {
                       <ol className="list-decimal pl-5 mt-1 space-y-1">
                         <li>Clique nos links acima para abrir o console do Firebase</li>
                         <li>Faça login com sua conta Google</li>
-                        <li>Clique no botão "Criar índice" na página que se abre</li>
+                        <li>Clique no botão &quot;Criar índice&quot; na página que se abre</li>
                         <li>Aguarde alguns minutos para que o índice seja criado</li>
                         <li>Atualize esta página após a criação dos índices</li>
                       </ol>

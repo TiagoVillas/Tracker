@@ -1,7 +1,10 @@
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy, Timestamp, serverTimestamp, limit, getDoc } from "firebase/firestore";
 import { db } from "./firebase/firebase";
-import { Transaction, Subscription, TransactionType, TransactionCategory } from "./types";
+import { Transaction, Subscription, TransactionType, TransactionCategory, InstallmentPurchase } from "./types";
 import { TRANSACTIONS_COLLECTION, SUBSCRIPTIONS_COLLECTION, initializeFinanceCollections } from "./firebase/firebaseUtils";
+
+// Constante para a coleção de compras parceladas
+export const INSTALLMENT_PURCHASES_COLLECTION = "installmentPurchases";
 
 // Get all subscriptions for a user
 export const getSubscriptionsByUser = async (userId: string): Promise<Subscription[]> => {
@@ -663,5 +666,351 @@ export const createSampleTransactions = async (userId: string): Promise<boolean>
   } catch (error) {
     console.error("Erro ao criar transações de exemplo:", error);
     return false;
+  }
+};
+
+// Função para criar uma transação a partir de uma assinatura
+export const createTransactionFromSubscription = async (subscription: Subscription): Promise<Transaction | null> => {
+  try {
+    console.log(`Criando transação a partir da assinatura: ${subscription.id}`);
+    
+    // Criar uma nova transação baseada na assinatura
+    const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+      userId: subscription.userId,
+      amount: subscription.amount,
+      type: 'expense',
+      category: subscription.category,
+      description: `${subscription.description} (Assinatura)`,
+      date: new Date(),
+      isRecurring: true,
+      subscriptionId: subscription.id
+    };
+    
+    // Criar a transação
+    const newTransaction = await createTransaction(transaction);
+    
+    if (newTransaction) {
+      // Atualizar a assinatura com a data do último pagamento e o ID da transação
+      await updateSubscription(subscription.id, {
+        lastPaymentDate: new Date(),
+        lastPaymentTransactionId: newTransaction.id
+      });
+      
+      console.log(`Transação criada com sucesso a partir da assinatura: ${subscription.id}`);
+      return newTransaction;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Erro ao criar transação a partir da assinatura:", error);
+    return null;
+  }
+};
+
+// Função para obter todas as compras parceladas de um usuário
+export const getInstallmentPurchasesByUser = async (userId: string): Promise<InstallmentPurchase[]> => {
+  try {
+    console.log(`Buscando compras parceladas para usuário ${userId}`);
+    
+    // Buscar todas as compras parceladas do usuário
+    const q = query(
+      collection(db, INSTALLMENT_PURCHASES_COLLECTION),
+      where("userId", "==", userId)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log(`Total de compras parceladas encontradas: ${querySnapshot.size}`);
+    
+    if (querySnapshot.empty) {
+      console.log("Nenhuma compra parcelada encontrada para o usuário:", userId);
+      return [];
+    }
+    
+    // Converter os documentos para objetos InstallmentPurchase
+    let installmentPurchases = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      
+      // Converter Timestamp para Date
+      let startDate = data.startDate;
+      if (startDate && startDate instanceof Timestamp) {
+        startDate = startDate.toDate();
+      }
+      
+      let nextDueDate = data.nextDueDate;
+      if (nextDueDate && nextDueDate instanceof Timestamp) {
+        nextDueDate = nextDueDate.toDate();
+      }
+      
+      let createdAt = data.createdAt;
+      if (createdAt && createdAt instanceof Timestamp) {
+        createdAt = createdAt.toDate();
+      }
+      
+      let updatedAt = data.updatedAt;
+      if (updatedAt && updatedAt instanceof Timestamp) {
+        updatedAt = updatedAt.toDate();
+      }
+      
+      return {
+        id: doc.id,
+        ...data,
+        startDate,
+        nextDueDate,
+        createdAt: createdAt || new Date(),
+        updatedAt: updatedAt || new Date()
+      } as InstallmentPurchase;
+    });
+    
+    // Ordenar por data de vencimento (mais próxima primeiro)
+    installmentPurchases.sort((a, b) => {
+      const dateA = a.nextDueDate instanceof Date ? a.nextDueDate : new Date(a.nextDueDate);
+      const dateB = b.nextDueDate instanceof Date ? b.nextDueDate : new Date(b.nextDueDate);
+      return dateA.getTime() - dateB.getTime();
+    });
+    
+    console.log(`Retornando ${installmentPurchases.length} compras parceladas`);
+    return installmentPurchases;
+  } catch (error) {
+    console.error("Erro ao buscar compras parceladas:", error);
+    return [];
+  }
+};
+
+// Função para criar uma nova compra parcelada
+export const createInstallmentPurchase = async (
+  purchase: Omit<InstallmentPurchase, 'id' | 'createdAt' | 'updatedAt' | 'paidInstallments' | 'isCompleted' | 'transactionIds'> & { userId?: string },
+  createFirstInstallment: boolean = true
+): Promise<InstallmentPurchase | null> => {
+  try {
+    console.log("Criando nova compra parcelada:", purchase);
+    
+    // Verificar se o usuário está definido
+    if (!purchase.userId) {
+      console.error("userId é obrigatório para criar uma compra parcelada");
+      return null;
+    }
+    
+    // Inicializar coleções se necessário
+    await initializeFinanceCollections(purchase.userId);
+    
+    // Preparar dados para salvar
+    const now = new Date();
+    const purchaseData = {
+      ...purchase,
+      paidInstallments: 0,
+      isCompleted: false,
+      transactionIds: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    
+    // Adicionar à coleção
+    const docRef = await addDoc(collection(db, INSTALLMENT_PURCHASES_COLLECTION), purchaseData);
+    console.log("Compra parcelada criada com ID:", docRef.id);
+    
+    // Buscar o documento recém-criado
+    const newPurchaseDoc = await getDoc(docRef);
+    if (!newPurchaseDoc.exists()) {
+      console.error("Erro ao buscar compra parcelada recém-criada");
+      return null;
+    }
+    
+    const newPurchaseData = newPurchaseDoc.data();
+    
+    // Converter Timestamp para Date
+    let startDate = newPurchaseData.startDate;
+    if (startDate && startDate instanceof Timestamp) {
+      startDate = startDate.toDate();
+    }
+    
+    let nextDueDate = newPurchaseData.nextDueDate;
+    if (nextDueDate && nextDueDate instanceof Timestamp) {
+      nextDueDate = nextDueDate.toDate();
+    }
+    
+    let createdAt = newPurchaseData.createdAt;
+    if (createdAt && createdAt instanceof Timestamp) {
+      createdAt = createdAt.toDate();
+    }
+    
+    let updatedAt = newPurchaseData.updatedAt;
+    if (updatedAt && updatedAt instanceof Timestamp) {
+      updatedAt = updatedAt.toDate();
+    }
+    
+    const newPurchase: InstallmentPurchase = {
+      id: docRef.id,
+      ...newPurchaseData,
+      startDate,
+      nextDueDate,
+      createdAt: createdAt || now,
+      updatedAt: updatedAt || now,
+      paidInstallments: 0,
+      isCompleted: false,
+      transactionIds: []
+    };
+    
+    // Criar a primeira parcela como transação, se solicitado
+    if (createFirstInstallment) {
+      const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+        userId: purchase.userId,
+        amount: purchase.installmentAmount,
+        type: 'expense',
+        category: purchase.category,
+        description: `${purchase.description} (1/${purchase.totalInstallments})`,
+        date: purchase.startDate,
+        isRecurring: false,
+        isInstallment: true,
+        installmentNumber: 1,
+        totalInstallments: purchase.totalInstallments,
+        installmentGroupId: docRef.id
+      };
+      
+      const newTransaction = await createTransaction(transaction);
+      
+      if (newTransaction) {
+        // Atualizar a compra parcelada com o ID da transação e incrementar parcelas pagas
+        const transactionIds = [newTransaction.id];
+        await updateInstallmentPurchase(docRef.id, {
+          paidInstallments: 1,
+          transactionIds
+        });
+        
+        // Atualizar o objeto de retorno
+        newPurchase.paidInstallments = 1;
+        newPurchase.transactionIds = transactionIds;
+      }
+    }
+    
+    console.log("Compra parcelada criada com sucesso:", newPurchase);
+    return newPurchase;
+  } catch (error) {
+    console.error("Erro ao criar compra parcelada:", error);
+    return null;
+  }
+};
+
+// Função para atualizar uma compra parcelada
+export const updateInstallmentPurchase = async (
+  id: string,
+  purchase: Partial<InstallmentPurchase>
+): Promise<boolean> => {
+  try {
+    console.log(`Atualizando compra parcelada ${id}:`, purchase);
+    
+    // Preparar dados para atualização
+    const updateData = {
+      ...purchase,
+      updatedAt: serverTimestamp()
+    };
+    
+    // Atualizar documento
+    await updateDoc(doc(db, INSTALLMENT_PURCHASES_COLLECTION, id), updateData);
+    console.log(`Compra parcelada ${id} atualizada com sucesso`);
+    
+    return true;
+  } catch (error) {
+    console.error(`Erro ao atualizar compra parcelada ${id}:`, error);
+    return false;
+  }
+};
+
+// Função para excluir uma compra parcelada
+export const deleteInstallmentPurchase = async (id: string): Promise<boolean> => {
+  try {
+    console.log(`Excluindo compra parcelada ${id}`);
+    
+    // Excluir documento
+    await deleteDoc(doc(db, INSTALLMENT_PURCHASES_COLLECTION, id));
+    console.log(`Compra parcelada ${id} excluída com sucesso`);
+    
+    return true;
+  } catch (error) {
+    console.error(`Erro ao excluir compra parcelada ${id}:`, error);
+    return false;
+  }
+};
+
+// Função para adicionar uma nova parcela a uma compra parcelada
+export const addInstallmentPayment = async (
+  purchaseId: string,
+  installmentNumber: number,
+  paymentDate: Date | string = new Date()
+): Promise<Transaction | null> => {
+  try {
+    console.log(`Adicionando pagamento da parcela ${installmentNumber} para compra ${purchaseId}`);
+    
+    // Buscar a compra parcelada
+    const purchaseDoc = await getDoc(doc(db, INSTALLMENT_PURCHASES_COLLECTION, purchaseId));
+    if (!purchaseDoc.exists()) {
+      console.error(`Compra parcelada ${purchaseId} não encontrada`);
+      return null;
+    }
+    
+    const purchase = purchaseDoc.data() as InstallmentPurchase;
+    
+    // Verificar se a parcela já foi paga
+    if (installmentNumber <= purchase.paidInstallments) {
+      console.error(`Parcela ${installmentNumber} já foi paga`);
+      return null;
+    }
+    
+    // Verificar se a parcela é válida
+    if (installmentNumber > purchase.totalInstallments) {
+      console.error(`Parcela ${installmentNumber} é maior que o total de parcelas ${purchase.totalInstallments}`);
+      return null;
+    }
+    
+    // Criar transação para a parcela
+    const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+      userId: purchase.userId,
+      amount: purchase.installmentAmount,
+      type: 'expense',
+      category: purchase.category,
+      description: `${purchase.description} (${installmentNumber}/${purchase.totalInstallments})`,
+      date: paymentDate,
+      isRecurring: false,
+      isInstallment: true,
+      installmentNumber,
+      totalInstallments: purchase.totalInstallments,
+      installmentGroupId: purchaseId
+    };
+    
+    const newTransaction = await createTransaction(transaction);
+    
+    if (newTransaction) {
+      // Atualizar a compra parcelada
+      const transactionIds = [...(purchase.transactionIds || []), newTransaction.id];
+      const paidInstallments = purchase.paidInstallments + 1;
+      const isCompleted = paidInstallments >= purchase.totalInstallments;
+      
+      // Calcular próxima data de vencimento se não estiver completa
+      let nextDueDate = purchase.nextDueDate;
+      if (!isCompleted) {
+        // Calcular próxima data de vencimento (um mês após a atual)
+        const currentDueDate = purchase.nextDueDate instanceof Date 
+          ? purchase.nextDueDate 
+          : new Date(purchase.nextDueDate);
+        
+        const newDueDate = new Date(currentDueDate);
+        newDueDate.setMonth(newDueDate.getMonth() + 1);
+        nextDueDate = newDueDate;
+      }
+      
+      await updateInstallmentPurchase(purchaseId, {
+        paidInstallments,
+        transactionIds,
+        isCompleted,
+        nextDueDate
+      });
+      
+      console.log(`Pagamento da parcela ${installmentNumber} adicionado com sucesso`);
+      return newTransaction;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Erro ao adicionar pagamento da parcela ${installmentNumber}:`, error);
+    return null;
   }
 }; 

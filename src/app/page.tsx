@@ -26,11 +26,12 @@ import {
   updateDoc, 
   doc, 
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  orderBy
 } from "firebase/firestore";
 import { createDocumentWithPermission, updateDocumentWithPermission } from "@/lib/firebase/firebaseUtils";
 import { fetchHabits, Habit as HabitType, toggleHabitCompletion } from "@/lib/habitUtils";
-import { fetchTasks, toggleTaskCompletion, addTask } from "@/lib/taskUtils";
+import { fetchTasks, toggleTaskCompletion, addTask, Project, fetchProjects } from "@/lib/taskUtils";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -38,8 +39,10 @@ export default function Dashboard() {
   
   const [habits, setHabits] = useState<HabitType[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [dailyNote, setDailyNote] = useState("");
   const [noteId, setNoteId] = useState<string | null>(null);
+  const [lastNote, setLastNote] = useState<{content: string; date: Date} | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -59,29 +62,34 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  // Adicionar um efeito para atualizar os dados quando o usuário retorna à página
+  // Atualizar dados quando o usuário voltar à página
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && user) {
-        console.log("Dashboard - User returned to page, refreshing data");
-        fetchUserData();
+        console.log("Dashboard - Page became visible, refreshing data");
+        fetchDailyNote();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Também atualizar quando a janela recebe foco
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user]);
+
+  // Atualizar dados quando a página for recarregada
+  useEffect(() => {
     const handleFocus = () => {
       if (user) {
         console.log("Dashboard - Window focused, refreshing data");
-        fetchUserData();
+        fetchDailyNote();
       }
     };
-    
+
     window.addEventListener('focus', handleFocus);
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
   }, [user]);
@@ -95,6 +103,7 @@ export default function Dashboard() {
       await Promise.all([
         fetchUserHabits(),
         fetchUserTasks(),
+        fetchUserProjects(),
         fetchDailyNote()
       ]);
       console.log("Dashboard - All data fetched successfully");
@@ -236,35 +245,11 @@ export default function Dashboard() {
         });
       });
       
-      // Filtrar as tarefas para hoje no lado do cliente
-      const tasksData = allTasks.filter(task => {
-        // Verificar se a tarefa é para hoje (dueDate entre today and tomorrow)
-        const isDueToday = task.dueDate && 
-          task.dueDate >= today && 
-          task.dueDate < tomorrow;
-        
-        // Verificar se a tarefa está marcada como "forToday"
-        const isMarkedForToday = task.forToday === true;
-        
-        // Verificar se a tarefa não tem data de vencimento (consideramos como tarefa para hoje)
-        const hasNoDueDate = task.dueDate === null;
-        
-        // Uma tarefa é para hoje se: tem vencimento hoje, está marcada para hoje, ou não tem data de vencimento
-        const isForToday = isDueToday || isMarkedForToday || hasNoDueDate;
-        
-        console.log(`Dashboard - Task "${task.title}" is for today:`, isForToday, {
-          isDueToday,
-          isMarkedForToday,
-          hasNoDueDate
-        });
-        
-        return isForToday;
-      });
+      // Não filtrar as tarefas no Dashboard, deixar o componente TasksCard fazer isso
+      setTasks(allTasks);
       
-      console.log("Dashboard - Total tasks for today:", tasksData.length);
-      console.log("Dashboard - Completed tasks:", tasksData.filter(task => task.completed).length);
-      
-      setTasks(tasksData);
+      console.log("Dashboard - Total tasks:", allTasks.length);
+      console.log("Dashboard - Completed tasks:", allTasks.filter(task => task.completed).length);
     } catch (error) {
       console.error("Error fetching tasks:", error);
       
@@ -284,6 +269,36 @@ export default function Dashboard() {
     }
   };
 
+  const fetchUserProjects = async () => {
+    if (!user) return;
+    
+    try {
+      console.log("Dashboard - Fetching projects for user:", user.uid);
+      
+      // Usar a função fetchProjects do arquivo taskUtils.ts
+      const projectsData = await fetchProjects(user.uid);
+      console.log("Dashboard - Projects fetched:", projectsData.length);
+      
+      setProjects(projectsData);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+      
+      // Verificar se o erro é relacionado a índices
+      if (error instanceof Error && error.message.includes("The query requires an index")) {
+        const indexUrl = error.message.match(/https:\/\/console\.firebase\.google\.com[^\s]+/);
+        if (indexUrl) {
+          setIndexErrors(prev => ({
+            ...prev,
+            projects: indexUrl[0]
+          }));
+        }
+      }
+      
+      // Em caso de erro, definir um array vazio
+      setProjects([]);
+    }
+  };
+
   const fetchDailyNote = async () => {
     if (!user) return;
     
@@ -296,15 +311,19 @@ export default function Dashboard() {
       // Buscar todas as notas do usuário
       const notesQuery = query(
         collection(db, "dailyNotes"),
-        where("userId", "==", user.uid)
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc")
       );
       
       const querySnapshot = await getDocs(notesQuery);
       console.log("Dashboard - Daily notes query result size:", querySnapshot.size);
       
-      // Filtrar as notas para hoje no lado do cliente
+      // Variáveis para armazenar os resultados
       let foundNoteId: string | null = null;
       let foundNoteContent: string = "";
+      let foundLastNote: {content: string; date: Date} | null = null;
+      let foundTodayNote = false;
+      let noteCounter = 0;
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -316,16 +335,40 @@ export default function Dashboard() {
         if (noteDate >= today && noteDate < tomorrow) {
           foundNoteId = doc.id;
           foundNoteContent = data.content || "";
+          foundTodayNote = true;
+        } 
+        // Se não for a nota de hoje e ainda não encontramos uma última nota
+        else if (noteCounter === 0 && !foundTodayNote) {
+          foundLastNote = {
+            content: data.content || "",
+            date: noteDate
+          };
         }
+        
+        noteCounter++;
       });
       
-      if (foundNoteId) {
-        setDailyNote(foundNoteContent);
-        setNoteId(foundNoteId);
+      // Definir a nota de hoje (se existir) ou limpar o campo
+      setDailyNote("");  // Sempre começar com o campo vazio
+      setNoteId(foundNoteId);  // Mas manter o ID se existir uma nota de hoje
+      
+      // Definir a última nota (se não for a de hoje)
+      if (foundTodayNote) {
+        // Se temos uma nota de hoje, ela se torna a última nota
+        setLastNote({
+          content: foundNoteContent,
+          date: today
+        });
       } else {
-        setDailyNote("");
-        setNoteId(null);
+        // Se não temos uma nota de hoje, usar a nota mais recente como última nota
+        setLastNote(foundLastNote);
       }
+      
+      console.log("Dashboard - Note setup complete:", { 
+        hasNoteToday: foundTodayNote, 
+        noteId: foundNoteId,
+        hasLastNote: !!foundLastNote 
+      });
     } catch (error) {
       console.error("Error fetching daily note:", error);
       
@@ -343,23 +386,29 @@ export default function Dashboard() {
       // Em caso de erro, definir valores padrão
       setDailyNote("");
       setNoteId(null);
+      setLastNote(null);
     }
   };
 
   const saveDailyNote = async () => {
-    if (!user) return;
+    if (!user || !dailyNote.trim()) return;
     
     setIsSaving(true);
     setError(null);
     
     try {
+      // Guardar o conteúdo atual da nota antes de limpar
+      const currentNoteContent = dailyNote.trim();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
       if (noteId) {
         // Atualizar nota existente
         await updateDocumentWithPermission(
           "dailyNotes",
           noteId,
           {
-            content: dailyNote,
+            content: currentNoteContent,
             updatedAt: serverTimestamp()
           },
           user.uid
@@ -367,13 +416,10 @@ export default function Dashboard() {
         console.log("Nota diária atualizada com sucesso!");
       } else {
         // Criar nova nota
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
         const newNote = await createDocumentWithPermission(
           "dailyNotes",
           {
-            content: dailyNote,
+            content: currentNoteContent,
             date: today
           },
           user.uid
@@ -382,6 +428,17 @@ export default function Dashboard() {
         console.log("Nova nota diária criada com sucesso:", newNote.id);
         setNoteId(newNote.id);
       }
+      
+      // Atualizar a última nota com o conteúdo que acabou de ser salvo
+      setLastNote({
+        content: currentNoteContent,
+        date: new Date()
+      });
+      
+      // Limpar o campo de texto após salvar com sucesso
+      setDailyNote("");
+      
+      console.log("Dashboard - Note saved successfully");
     } catch (error) {
       console.error("Error saving daily note:", error);
       setError("Erro ao salvar nota. Por favor, tente novamente.");
@@ -605,6 +662,7 @@ export default function Dashboard() {
                 updatingTaskId={updatingTaskId}
                 isAddingTestTask={isAddingTestTask}
                 indexError={indexErrors.tasks}
+                projects={projects}
               />
             </div>
 
@@ -616,7 +674,7 @@ export default function Dashboard() {
 
           {/* Seção de Objetivos - Posicionada abaixo dos cards e acima das notas diárias */}
           <div className="mt-10 mb-10">
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-3 rounded-lg">
+            <div>
               <GoalsCard />
             </div>
           </div>
@@ -630,6 +688,7 @@ export default function Dashboard() {
                 onSave={saveDailyNote}
                 isSaving={isSaving}
                 error={error}
+                lastNote={lastNote}
               />
             </div>
           </div>

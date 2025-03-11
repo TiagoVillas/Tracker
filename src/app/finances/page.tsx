@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { DollarSign, Plus, Filter, BarChart2, Calendar as CalendarIcon, Target, Download, RefreshCw } from "lucide-react";
+import { DollarSign, Plus, Filter, BarChart2, Calendar as CalendarIcon, Target, Download, RefreshCw, CreditCard } from "lucide-react";
 import AddTransactionModal from "@/components/AddTransactionModal";
 import TransactionList from "@/components/TransactionList";
-import FinanceSummary from "@/components/FinanceSummary";
 import SubscriptionList from "@/components/SubscriptionList";
 import FinanceCharts from "@/components/FinanceCharts";
 import FinanceCalendar from "@/components/FinanceCalendar";
@@ -18,16 +17,16 @@ import { Transaction } from "@/lib/types";
 import EditTransactionModal from "@/components/EditTransactionModal";
 import Navbar from "@/components/Navbar";
 import FinanceDashboardCards from "@/components/FinanceDashboardCards";
-import FinancialTips from "@/components/FinancialTips";
 import FinancialGoalsVisual from "@/components/FinancialGoalsVisual";
 import FloatingActionButton from "@/components/FloatingActionButton";
+import InstallmentPurchaseList from "@/components/InstallmentPurchaseList";
 
 export default function FinancesPage() {
   const { user } = useAuth();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'transactions' | 'subscriptions' | 'analytics' | 'calendar' | 'goals' | 'goals-classic'>('transactions');
+  const [activeTab, setActiveTab] = useState<'transactions' | 'subscriptions' | 'installments' | 'analytics' | 'calendar' | 'goals' | 'goals-classic'>('transactions');
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -300,9 +299,6 @@ export default function FinancesPage() {
             </div>
           </div>
 
-          {/* Adicionar dicas financeiras */}
-          <FinancialTips transactions={transactions} />
-
           {isLoading ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6 flex justify-center items-center h-40">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -331,10 +327,6 @@ export default function FinancesPage() {
             </div>
           ) : (
             <>
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-                <FinanceSummary transactions={transactions} />
-              </div>
-              
               <FinanceDashboardCards transactions={transactions} />
             </>
           )}
@@ -363,6 +355,17 @@ export default function FinancesPage() {
                 >
                   <RefreshCw className="inline-block h-4 w-4 mr-1" />
                   Assinaturas
+                </button>
+                <button
+                  onClick={() => setActiveTab('installments')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                    activeTab === 'installments'
+                      ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <CreditCard className="inline-block h-4 w-4 mr-1" />
+                  Parcelamentos
                 </button>
                 <button
                   onClick={() => setActiveTab('analytics')}
@@ -415,6 +418,14 @@ export default function FinancesPage() {
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
               <SubscriptionList 
                 onSubscriptionUpdated={loadTransactions}
+              />
+            </div>
+          )}
+
+          {activeTab === 'installments' && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
+              <InstallmentPurchaseList 
+                onPurchaseUpdated={loadTransactions}
               />
             </div>
           )}

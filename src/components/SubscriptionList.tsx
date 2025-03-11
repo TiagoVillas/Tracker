@@ -3,8 +3,12 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Subscription } from "@/lib/types";
-import { getSubscriptionsByUser, deleteSubscription } from "@/lib/financeUtils";
-import { Calendar, Edit, Trash2, Plus, RefreshCw } from "lucide-react";
+import { 
+  getSubscriptionsByUser, 
+  deleteSubscription, 
+  createTransactionFromSubscription 
+} from "@/lib/financeUtils";
+import { Calendar, Edit, Trash2, Plus, RefreshCw, DollarSign } from "lucide-react";
 import AddSubscriptionModal from "./AddSubscriptionModal";
 import EditSubscriptionModal from "./EditSubscriptionModal";
 
@@ -103,6 +107,25 @@ export default function SubscriptionList({ onSubscriptionUpdated }: Subscription
     setIsEditModalOpen(true);
   };
 
+  // Criar transação a partir da assinatura
+  const handleCreateTransaction = async (subscription: Subscription) => {
+    if (window.confirm(`Deseja registrar um pagamento para "${subscription.description}" no valor de ${formatCurrency(subscription.amount)}?`)) {
+      try {
+        const transaction = await createTransactionFromSubscription(subscription);
+        if (transaction) {
+          await loadSubscriptions();
+          onSubscriptionUpdated();
+          alert("Pagamento registrado com sucesso!");
+        } else {
+          alert("Erro ao registrar pagamento. Tente novamente.");
+        }
+      } catch (error) {
+        console.error("Erro ao criar transação:", error);
+        alert("Erro ao registrar pagamento. Tente novamente.");
+      }
+    }
+  };
+
   // Get frequency display name
   const getFrequencyDisplayName = (frequency: string) => {
     switch (frequency) {
@@ -197,14 +220,23 @@ export default function SubscriptionList({ onSubscriptionUpdated }: Subscription
                   </h3>
                   <div className="flex space-x-2">
                     <button
+                      onClick={() => handleCreateTransaction(subscription)}
+                      className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                      title="Registrar pagamento"
+                    >
+                      <DollarSign className="h-5 w-5" />
+                    </button>
+                    <button
                       onClick={() => handleEdit(subscription)}
                       className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                      title="Editar"
                     >
                       <Edit className="h-5 w-5" />
                     </button>
                     <button
                       onClick={() => handleDelete(subscription.id)}
                       className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                      title="Excluir"
                     >
                       <Trash2 className="h-5 w-5" />
                     </button>
@@ -243,6 +275,12 @@ export default function SubscriptionList({ onSubscriptionUpdated }: Subscription
                       {statusText}
                     </span>
                   </div>
+                  
+                  {subscription.lastPaymentDate && (
+                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Último pagamento: {formatDate(subscription.lastPaymentDate)}
+                    </div>
+                  )}
                 </div>
               </div>
             );

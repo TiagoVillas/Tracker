@@ -11,7 +11,11 @@ import {
   Trash2,
   Save,
   X,
-  ExternalLink
+  ExternalLink,
+  CheckCircle,
+  AlertCircle,
+  Search,
+  Plus
 } from "lucide-react";
 import { db } from "@/lib/firebase/firebase";
 import { 
@@ -20,10 +24,12 @@ import {
   where, 
   getDocs, 
   orderBy, 
-  Timestamp 
+  Timestamp,
+  serverTimestamp,
+  addDoc
 } from "firebase/firestore";
 import Link from "next/link";
-import { updateDocumentWithPermission, deleteDocumentWithPermission } from "@/lib/firebase/firebaseUtils";
+import { updateDocumentWithPermission, deleteDocumentWithPermission, createDocumentWithPermission } from "@/lib/firebase/firebaseUtils";
 
 interface Note {
   id: string;
@@ -43,6 +49,10 @@ export default function NotesPage() {
   const [editedContent, setEditedContent] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [newNoteContent, setNewNoteContent] = useState("");
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -118,6 +128,7 @@ export default function NotesPage() {
     if (!user) return;
     
     setIsSaving(true);
+    setError(null);
     
     try {
       await updateDocumentWithPermission(
@@ -125,7 +136,7 @@ export default function NotesPage() {
         noteId,
         {
           content: editedContent,
-          updatedAt: new Date()
+          updatedAt: serverTimestamp()
         },
         user.uid
       );
@@ -139,9 +150,12 @@ export default function NotesPage() {
         )
       );
       
-      // Sair do modo de edição
       setEditingNoteId(null);
       setEditedContent("");
+      
+      // Mostrar mensagem de sucesso
+      setSuccessMessage("Nota atualizada com sucesso!");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
       console.error("Error updating note:", error);
       setError("Erro ao atualizar nota. Por favor, tente novamente.");
@@ -151,9 +165,10 @@ export default function NotesPage() {
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!user || !window.confirm("Tem certeza que deseja excluir esta nota?")) return;
+    if (!user) return;
     
     setIsDeleting(noteId);
+    setError(null);
     
     try {
       await deleteDocumentWithPermission(
@@ -164,6 +179,10 @@ export default function NotesPage() {
       
       // Remover a nota da lista local
       setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+      
+      // Mostrar mensagem de sucesso
+      setSuccessMessage("Nota excluída com sucesso!");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
       console.error("Error deleting note:", error);
       setError("Erro ao excluir nota. Por favor, tente novamente.");
@@ -172,12 +191,50 @@ export default function NotesPage() {
     }
   };
 
+  const handleCreateNote = async () => {
+    if (!user || !newNoteContent.trim()) return;
+    
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      const newNote = await createDocumentWithPermission(
+        "dailyNotes",
+        {
+          content: newNoteContent,
+          date: new Date()
+        },
+        user.uid
+      );
+      
+      // Adicionar a nova nota à lista local
+      const createdNote: Note = {
+        id: newNote.id,
+        content: newNoteContent,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      setNotes(prevNotes => [createdNote, ...prevNotes]);
+      setNewNoteContent("");
+      setIsCreatingNote(false);
+      
+      // Mostrar mensagem de sucesso
+      setSuccessMessage("Nova nota criada com sucesso!");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error("Error creating note:", error);
+      setError("Erro ao criar nota. Por favor, tente novamente.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('pt-BR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     }).format(date);
   };
 
@@ -188,6 +245,11 @@ export default function NotesPage() {
     }).format(date);
   };
 
+  // Filtrar notas com base no termo de pesquisa
+  const filteredNotes = notes.filter(note => 
+    note.content.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -197,158 +259,237 @@ export default function NotesPage() {
   }
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-gray-900' : 'bg-gray-100'}`}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
       <Navbar />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Minhas Notas Diárias</h1>
-        </div>
-        
-        {indexError && (
-          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-md">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <ExternalLink className="h-5 w-5 text-yellow-400" aria-hidden="true" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                  Índice necessário
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
-                  <p>
-                    É necessário criar um índice no Firebase para esta consulta. 
-                    <a 
-                      href={indexError}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium underline ml-1"
-                    >
-                      Clique aqui para criar o índice
-                    </a>
-                  </p>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="mb-6 flex justify-between items-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Minhas Notas</h1>
+            <button
+              onClick={() => setIsCreatingNote(true)}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200"
+            >
+              <Plus className="-ml-1 mr-1.5 h-4 w-4" />
+              Nova Nota
+            </button>
+          </div>
+
+          {/* Mensagem de sucesso */}
+          {successMessage && (
+            <div className="mb-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-400 p-4 flex items-start">
+              <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 mr-2 flex-shrink-0" />
+              <p className="text-sm text-green-700 dark:text-green-300">{successMessage}</p>
+            </div>
+          )}
+
+          {/* Mensagem de erro */}
+          {error && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/30 border-l-4 border-red-400 p-4 flex items-start">
+              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mr-2 flex-shrink-0" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </div>
+          )}
+
+          {/* Alerta para criação de índices */}
+          {indexError && (
+            <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <AlertCircle className="h-5 w-5 text-yellow-400" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                    Atenção: Índice necessário
+                  </h3>
+                  <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                    <p>
+                      Para melhorar o desempenho das consultas, é recomendado criar o seguinte índice no Firebase:
+                    </p>
+                    <div className="mt-2">
+                      <a 
+                        href={indexError} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center text-yellow-800 dark:text-yellow-200 underline"
+                      >
+                        Criar índice para notas
+                        <ExternalLink className="ml-1 h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Formulário para criar nova nota */}
+          {isCreatingNote && (
+            <div className="mb-6 bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Nova Nota</h2>
+              <textarea
+                rows={4}
+                className="shadow-sm block w-full focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100 transition-colors duration-200 mb-3"
+                placeholder="Escreva sua nota aqui..."
+                value={newNoteContent}
+                onChange={(e) => setNewNoteContent(e.target.value)}
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-xs font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                  onClick={() => {
+                    setIsCreatingNote(false);
+                    setNewNoteContent("");
+                  }}
+                >
+                  <X className="-ml-1 mr-1.5 h-3 w-3" />
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200 disabled:opacity-50"
+                  onClick={handleCreateNote}
+                  disabled={isSaving || !newNoteContent.trim()}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="animate-spin -ml-1 mr-1.5 h-3 w-3" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="-ml-1 mr-1.5 h-3 w-3" />
+                      Salvar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Barra de pesquisa */}
+          <div className="mb-6">
+            <div className="relative rounded-md shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100 transition-colors duration-200"
+                placeholder="Pesquisar notas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
-        )}
-        
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 p-4 rounded-md">
-            <p className="text-red-700 dark:text-red-300">{error}</p>
-          </div>
-        ) : notes.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 text-center">
-            <Calendar className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhuma nota encontrada</h3>
-            <p className="text-gray-500 dark:text-gray-400">
-              Você ainda não criou nenhuma nota diária. Volte para a página inicial para criar sua primeira nota.
-            </p>
-            <Link 
-              href="/"
-              className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200"
-            >
-              Criar Nota
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {notes.map((note) => (
-              <div 
-                key={note.id} 
-                className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden transition-colors duration-200"
-              >
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                      {formatDate(note.createdAt)}
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        Atualizado às {formatTime(note.updatedAt)}
-                      </span>
-                      
-                      {editingNoteId !== note.id && (
-                        <div className="flex space-x-2 ml-4">
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
+              <span className="ml-2 text-gray-600 dark:text-gray-400">Carregando notas...</span>
+            </div>
+          ) : filteredNotes.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 text-center">
+              {searchTerm ? (
+                <p className="text-gray-600 dark:text-gray-400">Nenhuma nota encontrada para "{searchTerm}"</p>
+              ) : (
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">Você ainda não tem notas.</p>
+                  <button
+                    onClick={() => setIsCreatingNote(true)}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200"
+                  >
+                    <Plus className="-ml-1 mr-1.5 h-4 w-4" />
+                    Criar primeira nota
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredNotes.map((note) => (
+                <div 
+                  key={note.id} 
+                  className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden transition-colors duration-200"
+                >
+                  <div className="p-4">
+                    {editingNoteId === note.id ? (
+                      <div className="space-y-3">
+                        <textarea
+                          rows={4}
+                          className="shadow-sm block w-full focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100 transition-colors duration-200"
+                          value={editedContent}
+                          onChange={(e) => setEditedContent(e.target.value)}
+                        />
+                        <div className="flex justify-end space-x-2">
                           <button
-                            onClick={() => handleEditNote(note)}
-                            className="p-1 rounded-full text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 focus:outline-none"
-                            title="Editar nota"
+                            type="button"
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-xs font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                            onClick={handleCancelEdit}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <X className="-ml-1 mr-1.5 h-3 w-3" />
+                            Cancelar
                           </button>
                           <button
-                            onClick={() => handleDeleteNote(note.id)}
-                            className="p-1 rounded-full text-gray-400 hover:text-red-500 dark:hover:text-red-400 focus:outline-none"
-                            title="Excluir nota"
-                            disabled={isDeleting === note.id}
+                            type="button"
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200 disabled:opacity-50"
+                            onClick={() => handleSaveEdit(note.id)}
+                            disabled={isSaving}
                           >
-                            {isDeleting === note.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                            {isSaving ? (
+                              <>
+                                <Loader2 className="animate-spin -ml-1 mr-1.5 h-3 w-3" />
+                                Salvando...
+                              </>
                             ) : (
-                              <Trash2 className="h-4 w-4" />
+                              <>
+                                <Save className="-ml-1 mr-1.5 h-3 w-3" />
+                                Salvar
+                              </>
                             )}
                           </button>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {editingNoteId === note.id ? (
-                    <div className="space-y-3">
-                      <textarea
-                        rows={6}
-                        className="shadow-sm block w-full focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100 transition-colors duration-200"
-                        value={editedContent}
-                        onChange={(e) => setEditedContent(e.target.value)}
-                      />
-                      
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={handleCancelEdit}
-                          className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-xs font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
-                          disabled={isSaving}
-                        >
-                          <X className="-ml-1 mr-1.5 h-3 w-3" />
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={() => handleSaveEdit(note.id)}
-                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors duration-200"
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <>
-                              <Loader2 className="animate-spin -ml-1 mr-1.5 h-3 w-3" />
-                              Salvando...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="-ml-1 mr-1.5 h-3 w-3" />
-                              Salvar
-                            </>
-                          )}
-                        </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="prose dark:prose-invert max-w-none">
-                      {note.content.split('\n').map((paragraph, index) => (
-                        <p key={index} className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                          {paragraph}
-                        </p>
-                      ))}
-                    </div>
-                  )}
+                    ) : (
+                      <>
+                        <div className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 mb-3">
+                          {note.content}
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3">
+                          <div className="flex items-center">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            <span>{formatDate(note.createdAt)} às {formatTime(note.createdAt)}</span>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center p-1 border border-transparent rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                              onClick={() => handleEditNote(note)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center p-1 border border-transparent rounded-full text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50"
+                              onClick={() => handleDeleteNote(note.id)}
+                              disabled={isDeleting === note.id}
+                            >
+                              {isDeleting === note.id ? (
+                                <Loader2 className="animate-spin h-3.5 w-3.5" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

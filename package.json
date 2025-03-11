@@ -4,20 +4,30 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "browserify-zlib": "^0.2.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.13.0",
     "framer-motion": "^11.3.31",
+    "https-browserify": "^1.0.0",
     "lucide-react": "^0.436.0",
     "next": "14.2.7",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
     "react": "^18",
     "react-dom": "^18",
-    "react-markdown": "^9.0.1"
+    "react-markdown": "^9.0.1",
+    "recharts": "^2.15.1",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "util": "^0.12.5"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",

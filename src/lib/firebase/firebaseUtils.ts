@@ -108,15 +108,20 @@ export const createDocumentWithPermission = async (
     
     console.log(`Documento criado com sucesso em ${collectionName} com ID ${docRef.id}`);
     
-    return {
+    // Retornar os dados com o ID e timestamps convertidos para Date
+    // Isso é importante para que a UI possa exibir os dados corretamente
+    const returnData = {
       id: docRef.id,
       ...data,
       userId,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    
+    console.log(`Dados retornados após criação:`, returnData);
+    return returnData;
   } catch (error) {
-    console.error(`Error creating document in ${collectionName}:`, error);
+    console.error(`Erro ao criar documento em ${collectionName}:`, error);
     throw error;
   }
 };
@@ -204,4 +209,106 @@ export const isUserAuthenticated = (): boolean => {
 // Função para obter o ID do usuário atual
 export const getCurrentUserId = (): string | null => {
   return auth.currentUser?.uid || null;
+};
+
+// Collection names
+export const TRANSACTIONS_COLLECTION = "transactions";
+export const SUBSCRIPTIONS_COLLECTION = "subscriptions";
+
+// Initialize collections with proper security rules
+export const initializeFinanceCollections = async (userId: string) => {
+  try {
+    // Check if collections exist
+    const transactionsRef = collection(db, TRANSACTIONS_COLLECTION);
+    const subscriptionsRef = collection(db, SUBSCRIPTIONS_COLLECTION);
+    
+    // Try to add a test document to ensure we have write permissions
+    const testTransactionRef = doc(transactionsRef, "test_" + userId);
+    const testSubscriptionRef = doc(subscriptionsRef, "test_" + userId);
+    
+    try {
+      // Try to set test documents
+      await setDoc(testTransactionRef, {
+        userId,
+        test: true,
+        createdAt: serverTimestamp()
+      });
+      
+      await setDoc(testSubscriptionRef, {
+        userId,
+        test: true,
+        createdAt: serverTimestamp()
+      });
+      
+      // Delete test documents
+      await deleteDoc(testTransactionRef);
+      await deleteDoc(testSubscriptionRef);
+      
+      console.log("Finance collections initialized successfully");
+      return true;
+    } catch (error) {
+      console.error("Error initializing finance collections:", error);
+      
+      // If we get a permission error, log instructions for the user
+      if (error instanceof Error && error.message.includes("permission")) {
+        console.error(`
+          Firebase permission error. Please update your Firestore security rules:
+          
+          rules_version = '2';
+          service cloud.firestore {
+            match /databases/{database}/documents {
+              // Allow users to read and write their own data
+              match /transactions/{document=**} {
+                allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+                allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+              }
+              
+              match /subscriptions/{document=**} {
+                allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+                allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+              }
+            }
+          }
+        `);
+      }
+      
+      return false;
+    }
+  } catch (error) {
+    console.error("Error checking collections:", error);
+    return false;
+  }
+};
+
+// Add this function to help users create required indexes
+export const displayIndexInstructions = () => {
+  console.info(`
+    ===== FIREBASE INDEX INSTRUCTIONS =====
+    
+    Your app requires some Firestore indexes to work properly. Please follow these steps:
+    
+    1. For Transactions Collection:
+       - Go to: https://console.firebase.google.com/project/habitracker-2f323/firestore/indexes
+       - Click "Add Index"
+       - Collection: transactions
+       - Fields to index:
+         * userId (Ascending)
+         * date (Ascending)
+         * __name__ (Ascending)
+       - Click "Create"
+    
+    2. For Subscriptions Collection:
+       - Go to: https://console.firebase.google.com/project/habitracker-2f323/firestore/indexes
+       - Click "Add Index"
+       - Collection: subscriptions
+       - Fields to index:
+         * userId (Ascending)
+         * nextPaymentDate (Ascending)
+         * __name__ (Ascending)
+       - Click "Create"
+    
+    Alternatively, you can click on the links in the error messages to create the indexes directly.
+    
+    Note: It may take a few minutes for the indexes to be created and become active.
+  `);
 };

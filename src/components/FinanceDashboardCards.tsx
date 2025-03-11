@@ -113,9 +113,9 @@ export default function FinanceDashboardCards({ transactions }: FinanceDashboard
     
     if (baseAmount === 0) {
       return [
-        { name: "Necessidades", value: 0, percentage: 0, color: "#8884d8" },
-        { name: "Desejos", value: 0, percentage: 0, color: "#82ca9d" },
-        { name: "Investimentos", value: 0, percentage: 0, color: "#ffc658" }
+        { name: "Necessidades", value: 0, percentage: 0, color: "#8884d8", idealPercentage: 50 },
+        { name: "Desejos", value: 0, percentage: 0, color: "#82ca9d", idealPercentage: 30 },
+        { name: "Investimentos", value: 0, percentage: 0, color: "#ffc658", idealPercentage: 20 }
       ];
     }
     

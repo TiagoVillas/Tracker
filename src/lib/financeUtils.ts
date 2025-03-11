@@ -281,7 +281,7 @@ export const createTransaction = async (transaction: Omit<Transaction, 'id' | 'c
     await initializeFinanceCollections(transaction.userId);
     
     // Convert date to Firestore Timestamp if it's a Date object
-    let firestoreDate = transaction.date;
+    let firestoreDate: any = transaction.date;
     if (transaction.date instanceof Date) {
       firestoreDate = Timestamp.fromDate(transaction.date);
     } else if (typeof transaction.date === 'string') {
@@ -338,7 +338,7 @@ export const updateTransaction = async (id: string, transaction: Partial<Transac
     const transactionRef = doc(db, TRANSACTIONS_COLLECTION, id);
     
     // Convert date to Firestore Timestamp if it's a Date object
-    let updateData = { ...transaction, updatedAt: serverTimestamp() };
+    let updateData: any = { ...transaction, updatedAt: serverTimestamp() };
     if (transaction.date) {
       if (transaction.date instanceof Date) {
         updateData.date = Timestamp.fromDate(transaction.date);
@@ -401,7 +401,7 @@ export const createSubscription = async (subscription: Omit<Subscription, 'id' |
     await initializeFinanceCollections(subscription.userId);
     
     // Convert dates to Firestore Timestamps
-    let firestoreDate = subscription.date;
+    let firestoreDate: any = subscription.date;
     if (subscription.date instanceof Date) {
       firestoreDate = Timestamp.fromDate(subscription.date);
     } else if (typeof subscription.date === 'string') {
@@ -412,7 +412,7 @@ export const createSubscription = async (subscription: Omit<Subscription, 'id' |
       }
     }
     
-    let firestoreNextPaymentDate = subscription.nextPaymentDate;
+    let firestoreNextPaymentDate: any = subscription.nextPaymentDate;
     if (subscription.nextPaymentDate instanceof Date) {
       firestoreNextPaymentDate = Timestamp.fromDate(subscription.nextPaymentDate);
     } else if (typeof subscription.nextPaymentDate === 'string') {
@@ -459,7 +459,7 @@ export const updateSubscription = async (id: string, subscription: Partial<Subsc
     const subscriptionRef = doc(db, SUBSCRIPTIONS_COLLECTION, id);
     
     // Convert dates to Firestore Timestamps
-    let updateData = { ...subscription, updatedAt: serverTimestamp() };
+    let updateData: any = { ...subscription, updatedAt: serverTimestamp() };
     
     if (subscription.date) {
       if (subscription.date instanceof Date) {
@@ -571,7 +571,7 @@ export const createSampleTransactions = async (userId: string): Promise<boolean>
     const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     
     // Sample categories
-    const incomeCategories: TransactionCategory[] = ['salary', 'investment', 'gift', 'other_income'];
+    const incomeCategories: TransactionCategory[] = ['salary', 'gift', 'other_income'];
     const expenseCategories: TransactionCategory[] = [
       'food', 'housing', 'transportation', 'utilities', 'entertainment', 
       'healthcare', 'education', 'subscription', 'shopping', 'travel', 'work', 'other_expense'
@@ -594,7 +594,7 @@ export const createSampleTransactions = async (userId: string): Promise<boolean>
     // Add random transactions
     for (let i = 0; i < 30; i++) {
       const isIncome = Math.random() > 0.7;
-      const type = isIncome ? 'income' : 'expense';
+      const type = isIncome ? 'income' as TransactionType : 'expense' as TransactionType;
       const category = isIncome 
         ? incomeCategories[Math.floor(Math.random() * incomeCategories.length)]
         : expenseCategories[Math.floor(Math.random() * expenseCategories.length)];
@@ -650,12 +650,12 @@ export const createSampleTransactions = async (userId: string): Promise<boolean>
     
     // Create all transactions
     for (const transaction of sampleTransactions) {
-      await createTransaction(transaction);
+      await createTransaction(transaction as Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & { userId: string });
     }
     
     // Create all subscriptions
     for (const subscription of subscriptions) {
-      await createSubscription(subscription);
+      await createSubscription(subscription as Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'> & { userId: string });
     }
     
     console.log(`Criadas ${sampleTransactions.length} transações e ${subscriptions.length} assinaturas de exemplo`);

@@ -13,7 +13,7 @@ import FinanceCalendar from "@/components/FinanceCalendar";
 import DailyTransactionDetails from "@/components/DailyTransactionDetails";
 import FinancialGoals from "@/components/FinancialGoals";
 import ExportFinanceData from "@/components/ExportFinanceData";
-import { getTransactionsByUser, createSampleTransactions } from "@/lib/financeUtils";
+import { getTransactionsByUser, createSampleTransactions, createTransaction } from "@/lib/financeUtils";
 import { Transaction } from "@/lib/types";
 import EditTransactionModal from "@/components/EditTransactionModal";
 import Navbar from "@/components/Navbar";

@@ -753,11 +753,19 @@ export const getInstallmentPurchasesByUser = async (userId: string): Promise<Ins
       
       return {
         id: doc.id,
-        ...data,
+        userId: data.userId,
+        description: data.description,
+        totalAmount: data.totalAmount,
+        installmentAmount: data.installmentAmount,
+        totalInstallments: data.totalInstallments,
+        paidInstallments: data.paidInstallments || 0,
+        category: data.category,
         startDate,
         nextDueDate,
         createdAt: createdAt || new Date(),
-        updatedAt: updatedAt || new Date()
+        updatedAt: updatedAt || new Date(),
+        isCompleted: data.isCompleted || false,
+        transactionIds: data.transactionIds || []
       } as InstallmentPurchase;
     });
     
@@ -840,7 +848,12 @@ export const createInstallmentPurchase = async (
     
     const newPurchase: InstallmentPurchase = {
       id: docRef.id,
-      ...newPurchaseData,
+      userId: purchase.userId,
+      description: purchase.description,
+      totalAmount: purchase.totalAmount,
+      installmentAmount: purchase.installmentAmount,
+      totalInstallments: purchase.totalInstallments,
+      category: purchase.category,
       startDate,
       nextDueDate,
       createdAt: createdAt || now,

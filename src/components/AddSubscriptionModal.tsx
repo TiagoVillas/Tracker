@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { createSubscription } from "@/lib/financeUtils";
-import { TransactionCategory } from "@/lib/types";
+import { TransactionCategory, TransactionType } from "@/lib/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 interface AddSubscriptionModalProps {
@@ -84,7 +84,7 @@ export default function AddSubscriptionModal({
         userId: user.uid,
         description,
         amount: parseFloat(amount),
-        type: 'expense',
+        type: 'expense' as TransactionType,
         category,
         date,
         isRecurring: true,

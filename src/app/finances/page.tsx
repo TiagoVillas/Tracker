@@ -179,7 +179,7 @@ export default function FinancesPage() {
         console.log("Transação de receita criada com sucesso:", incomeResult);
       } catch (incomeError) {
         console.error("Erro ao criar transação de receita:", incomeError);
-        alert(`Erro ao criar transação de receita: ${incomeError.message}`);
+        alert(`Erro ao criar transação de receita: ${incomeError instanceof Error ? incomeError.message : 'Erro desconhecido'}`);
         setIsCreatingSamples(false);
         return;
       }
@@ -202,7 +202,7 @@ export default function FinancesPage() {
         console.log("Transação de despesa criada com sucesso:", expenseResult);
       } catch (expenseError) {
         console.error("Erro ao criar transação de despesa:", expenseError);
-        alert(`Erro ao criar transação de despesa: ${expenseError.message}`);
+        alert(`Erro ao criar transação de despesa: ${expenseError instanceof Error ? expenseError.message : 'Erro desconhecido'}`);
         setIsCreatingSamples(false);
         return;
       }
@@ -213,7 +213,7 @@ export default function FinancesPage() {
       alert("Transações diretas criadas com sucesso!");
     } catch (error) {
       console.error("Erro ao criar transações diretas:", error);
-      alert(`Erro ao criar transações diretas: ${error.message}`);
+      alert(`Erro ao criar transações diretas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setIsCreatingSamples(false);
     }

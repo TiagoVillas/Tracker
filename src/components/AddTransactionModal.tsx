@@ -138,7 +138,7 @@ export default function AddTransactionModal({
       onClose();
     } catch (error) {
       console.error("Erro ao adicionar transação:", error);
-      setError(`Erro ao adicionar transação: ${error.message || "Tente novamente."}`);
+      setError(`Erro ao adicionar transação: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     } finally {
       setIsSubmitting(false);
     }

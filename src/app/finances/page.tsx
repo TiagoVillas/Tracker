@@ -143,7 +143,7 @@ export default function FinancesPage() {
     
     try {
       setIsCreatingSamples(true);
-      await createSampleTransactions();
+      await createSampleTransactions(user.uid);
       // Recarregar transações após criar as amostras
       await loadTransactions();
       alert("Transações de exemplo criadas com sucesso!");

@@ -163,6 +163,7 @@ export default function FinancesPage() {
       
       // Criar uma transação de receita diretamente
       const incomeTransaction = {
+        userId: user.uid,
         description: "Salário Direto",
         amount: 3000,
         type: 'income' as const,
@@ -185,6 +186,7 @@ export default function FinancesPage() {
       
       // Criar uma transação de despesa diretamente
       const expenseTransaction = {
+        userId: user.uid,
         description: "Aluguel Direto",
         amount: 1000,
         type: 'expense' as const,

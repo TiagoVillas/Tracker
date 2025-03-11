@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { createTransaction } from "@/lib/financeUtils";
 import { TransactionType, TransactionCategory } from "@/lib/types";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export default function AddTransactionModal({
   onTransactionAdded,
   defaultType = "expense"
 }: AddTransactionModalProps) {
+  const { user } = useAuth();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<TransactionType>(defaultType);
@@ -96,6 +98,11 @@ export default function AddTransactionModal({
     e.preventDefault();
     setError("");
 
+    if (!user) {
+      setError("Você precisa estar logado para adicionar uma transação");
+      return;
+    }
+
     if (!description.trim()) {
       setError("A descrição é obrigatória");
       return;
@@ -110,6 +117,7 @@ export default function AddTransactionModal({
       setIsSubmitting(true);
       
       const transactionData = {
+        userId: user.uid,
         description,
         amount: parseFloat(amount),
         type,

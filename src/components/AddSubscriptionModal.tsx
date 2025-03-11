@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { createSubscription } from "@/lib/financeUtils";
 import { TransactionCategory } from "@/lib/types";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface AddSubscriptionModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export default function AddSubscriptionModal({
   onClose,
   onSubscriptionAdded
 }: AddSubscriptionModalProps) {
+  const { user } = useAuth();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<TransactionCategory>("subscription");
@@ -60,6 +62,11 @@ export default function AddSubscriptionModal({
     e.preventDefault();
     setError("");
 
+    if (!user) {
+      setError("Você precisa estar logado para adicionar uma assinatura");
+      return;
+    }
+
     if (!description.trim()) {
       setError("A descrição é obrigatória");
       return;
@@ -74,6 +81,7 @@ export default function AddSubscriptionModal({
       setIsSubmitting(true);
       
       const subscriptionData = {
+        userId: user.uid,
         description,
         amount: parseFloat(amount),
         type: 'expense',
@@ -95,7 +103,7 @@ export default function AddSubscriptionModal({
       onClose();
     } catch (error) {
       console.error("Erro ao adicionar assinatura:", error);
-      setError(`Erro ao adicionar assinatura: ${error.message || "Tente novamente."}`);
+      setError(`Erro ao adicionar assinatura: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     } finally {
       setIsSubmitting(false);
     }

@@ -102,7 +102,7 @@ export default function EditSubscriptionModal({
       onClose();
     } catch (error) {
       console.error("Error updating subscription:", error);
-      setError("Erro ao atualizar assinatura. Tente novamente.");
+      setError(`Erro ao atualizar assinatura: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     } finally {
       setIsSubmitting(false);
     }
